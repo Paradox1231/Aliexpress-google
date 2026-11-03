@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="./icon-180.png">
   <link rel="icon" type="image/png" href="./icon-192.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <title>Visual Search — Product image finder · v5</title>
+  <title>Visual Search — Product image finder · v6</title>
   <style>
     :root { color-scheme: light; --ink:#192239; --muted:#69748a; --line:#e8ebf1; --surface:#fff; --bg:#f7f8fb; --accent:#ec653f; --soft:#fff3ed; --radius:20px; }
     * { box-sizing:border-box; }
@@ -103,7 +103,6 @@
     .promotions a { display:block; margin-top:5px; overflow-wrap:anywhere; }
     .promotions-label { color:#68758a; font-size:10px; }
     #galleryMount:empty { display:none; }
-    .load-trigger { height:1px; width:100%; pointer-events:none; }
     .load-more-btn { display:none; margin:10px auto; min-height:42px; padding:9px 20px; background:#fff; color:#29354c; border:1px solid #d9dfe8; border-radius:12px; font-size:13px; font-weight:750; }
     .load-more-btn:disabled { opacity:.55; }
     .more-status { color:var(--muted); font-size:12px; text-align:center; padding:12px 6px; min-height:32px; }
@@ -214,7 +213,6 @@
         <div id="resultsArea">
           <!-- Persistent gallery remains mounted while Google's per-page results update. -->
           <div id="galleryMount"></div>
-          <div id="loadTrigger" class="load-trigger" aria-hidden="true"></div>
           <!-- The Google Search Element still owns search execution, paging and attribution. -->
           <div id="googleInlineMount"></div>
         </div>
@@ -270,17 +268,13 @@
   let excludes=[];
   let galleryQuery='';
   let galleryKeys=new Set();
-  let autoPagePending=false;
-  let autoPageStopped=false;
-  let autoPagePaused=false;
+  let pagePending=false;
+  let pageStopped=false;
   let lastLoadedCount=0;
   let savedScroll=null;
   let hasAnyImages=false;
-  let scrollFrame=false;
-  let lastPageClickAt=0;
   let pageTimeout=null;
   let checkTimeout=null;
-  let galleryObserver=null;
   let activeQuery='';
 
   function read(key, fallbackValue='') { try { return localStorage.getItem(key) || fallbackValue; } catch(e) { return fallbackValue; } }
@@ -379,9 +373,8 @@
     $('galleryMount').replaceChildren();
     lastLoadedCount=0;
     hasAnyImages=false;
-    autoPageStopped=false;
-    autoPagePaused=false;
-    autoPagePending=false;
+    pageStopped=false;
+    pagePending=false;
     savedScroll=null;
     clearTimeout(pageTimeout); pageTimeout=null;
     clearTimeout(checkTimeout); checkTimeout=null;
@@ -462,51 +455,39 @@
     return selected>=0 ? (pages[selected+1] || null) : null;
   }
   function updateMoreUI() {
-    const next=hasAnyImages && !autoPageStopped ? findNextPage() : null;
+    const next=hasAnyImages && !pageStopped ? findNextPage() : null;
     const btn=$('loadMoreBtn');
-    // Keep manual loading as a fallback for Google pagination/browser restrictions.
+    // More results load only after the user presses the button.
     btn.style.display=next ? 'block' : 'none';
-    btn.disabled=autoPagePending;
-    btn.textContent=autoPagePending ? 'Loading images…' : (autoPagePaused ? 'Try loading more' : 'Load more images');
+    btn.disabled=pagePending;
+    btn.textContent=pagePending ? 'Loading images…' : 'Load more images';
   }
-  function maybeAutoPage() {
-    if (!hasAnyImages || autoPagePending || autoPageStopped || autoPagePaused || !currentId) return;
-    if (document.visibilityState==='hidden') return;
-    if (Date.now()-lastPageClickAt<1050) return;
-    const rect=$('loadTrigger').getBoundingClientRect();
-    if (rect.top>window.innerHeight+450 || rect.bottom<0) return;
-    requestNextPage(false);
-  }
-  function requestNextPage(manual) {
-    if (!hasAnyImages || autoPagePending || autoPageStopped) return false;
-    if (manual) autoPagePaused=false;
+  function requestNextPage() {
+    if (!hasAnyImages || pagePending || pageStopped) return false;
     const next=findNextPage();
     if (!next) {
-      autoPageStopped=true;
+      pageStopped=true;
       $('moreStatus').textContent='End of available Google results.';
       updateMoreUI();
       return false;
     }
-    autoPagePending=true;
+    pagePending=true;
     savedScroll=window.scrollY;
-    lastPageClickAt=Date.now();
     $('moreStatus').textContent='Loading more images…';
     updateMoreUI();
     try { next.click(); }
     catch(e) {
-      autoPagePending=false;
-      autoPagePaused=true;
-      $('moreStatus').textContent='Unable to load automatically. Use Google’s page links below.';
+      pagePending=false;
+      $('moreStatus').textContent='Unable to load the next page. Try again or use Google’s page links.';
       updateMoreUI();
       return false;
     }
     clearTimeout(pageTimeout);
     pageTimeout=setTimeout(()=>{
-      if (!autoPagePending) return;
-      autoPagePending=false;
-      autoPagePaused=true;
+      if (!pagePending) return;
+      pagePending=false;
       savedScroll=null;
-      $('moreStatus').textContent='Automatic loading paused. Tap Load more or use Google’s page links.';
+      $('moreStatus').textContent='Loading timed out. Tap Load more to retry or use Google’s page links.';
       updateMoreUI();
     },12000);
     return true;
@@ -514,12 +495,12 @@
   function onResultsRendered(gname, query) {
     if (gname !== 'productSearch' || (activeQuery && query!==activeQuery)) return;
     clearLoading();
-    const wasLoading=autoPagePending;
+    const wasLoading=pagePending;
     clearTimeout(pageTimeout); pageTimeout=null;
-    autoPagePending=false;
+    pagePending=false;
     if (wasLoading && lastLoadedCount===0) {
       // Stop rather than repeatedly asking Google for the same page.
-      autoPageStopped=true;
+      pageStopped=true;
       $('moreStatus').textContent='No additional unique results on this page.';
     } else if (wasLoading) {
       $('moreStatus').textContent='';
@@ -534,31 +515,15 @@
     // until the footer has finished rendering before inspecting the next page.
     clearTimeout(checkTimeout);
     checkTimeout=setTimeout(()=>{
-      if (!findNextPage() && hasAnyImages && !autoPagePending) {
-        autoPageStopped=true;
+      if (!findNextPage() && hasAnyImages && !pagePending) {
+        pageStopped=true;
         if (!$('moreStatus').textContent) $('moreStatus').textContent='End of available Google results.';
       }
       updateMoreUI();
-      // IntersectionObserver also runs when the sentinel is moved by new rows.
-      // One delayed check supports browsers with inconsistent observer events.
-      maybeAutoPage();
     },400);
   }
-  function beginAutoPaging() {
-    if ('IntersectionObserver' in window) {
-      galleryObserver=new IntersectionObserver((entries)=>{
-        if (entries.some(e=>e.isIntersecting)) maybeAutoPage();
-      },{rootMargin:'0px 0px 450px 0px',threshold:0});
-      galleryObserver.observe($('loadTrigger'));
-    }
-    window.addEventListener('scroll',()=>{
-      if(scrollFrame) return;
-      scrollFrame=true;
-      requestAnimationFrame(()=>{scrollFrame=false; maybeAutoPage();});
-    },{passive:true});
-    $('loadMoreBtn').addEventListener('click',()=>requestNextPage(true));
-  }
-  beginAutoPaging();
+  // Pagination is manual: scrolling never requests additional results.
+  $('loadMoreBtn').addEventListener('click',requestNextPage);
   // Explicit Google Search Element rendering keeps the results anchored inside the
   // app, rather than letting Google's automatic parser create an overlay widget.
   // The engine should also be set to Look and Feel > Layout > Results only.
