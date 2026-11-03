@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="./icon-180.png">
   <link rel="icon" type="image/png" href="./icon-192.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <title>Visual Search — Product image finder · v4</title>
+  <title>Visual Search — Product image finder · v5</title>
   <style>
     :root { color-scheme: light; --ink:#192239; --muted:#69748a; --line:#e8ebf1; --surface:#fff; --bg:#f7f8fb; --accent:#ec653f; --soft:#fff3ed; --radius:20px; }
     * { box-sizing:border-box; }
@@ -102,6 +102,10 @@
     .promotions { margin:0 0 10px; padding:9px; border:1px solid #e1e5eb; border-radius:10px; font-size:12px; }
     .promotions a { display:block; margin-top:5px; overflow-wrap:anywhere; }
     .promotions-label { color:#68758a; font-size:10px; }
+    #galleryMount:empty { display:none; }
+    .load-trigger { height:1px; width:100%; pointer-events:none; }
+    .load-more-btn { display:none; margin:10px auto; min-height:42px; padding:9px 20px; background:#fff; color:#29354c; border:1px solid #d9dfe8; border-radius:12px; font-size:13px; font-weight:750; }
+    .load-more-btn:disabled { opacity:.55; }
     .more-status { color:var(--muted); font-size:12px; text-align:center; padding:12px 6px; min-height:32px; }
     .more-status:empty { display:none; }
     #resultsArea .gsc-cursor-box { margin-top:8px !important; }
@@ -208,10 +212,14 @@
         </div>
         <div id="searchStatus" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="statusText">Loading image search…</span></div>
         <div id="resultsArea">
-          <!-- Google Search Element is rendered directly here by the documented Control API. -->
+          <!-- Persistent gallery remains mounted while Google's per-page results update. -->
+          <div id="galleryMount"></div>
+          <div id="loadTrigger" class="load-trigger" aria-hidden="true"></div>
+          <!-- The Google Search Element still owns search execution, paging and attribution. -->
           <div id="googleInlineMount"></div>
         </div>
         <p id="moreStatus" class="more-status" aria-live="polite"></p>
+        <button type="button" id="loadMoreBtn" class="load-more-btn">Load more images</button>
       </div>
     </section>
   </main>
@@ -260,14 +268,20 @@
   let running=false;
   let includes=[];
   let excludes=[];
-  let galleryItems=[];
   let galleryQuery='';
+  let galleryKeys=new Set();
   let autoPagePending=false;
   let autoPageStopped=false;
+  let autoPagePaused=false;
   let lastLoadedCount=0;
-  let savedScroll=0;
+  let savedScroll=null;
   let hasAnyImages=false;
   let scrollFrame=false;
+  let lastPageClickAt=0;
+  let pageTimeout=null;
+  let checkTimeout=null;
+  let galleryObserver=null;
+  let activeQuery='';
 
   function read(key, fallbackValue='') { try { return localStorage.getItem(key) || fallbackValue; } catch(e) { return fallbackValue; } }
   function write(key,value) { try { localStorage.setItem(key,value); return true; } catch(e) { return false; } }
@@ -359,70 +373,192 @@
   function getControl() { try { return window.google?.search?.cse?.element?.getElement?.('productSearch') || null; } catch(e) { return null; } }
   function setLoading(message) { status.style.display='flex'; statusText.textContent=message; }
   function clearLoading() { status.style.display='none'; }
+  function resetGallery(query) {
+    galleryQuery=query;
+    galleryKeys=new Set();
+    $('galleryMount').replaceChildren();
+    lastLoadedCount=0;
+    hasAnyImages=false;
+    autoPageStopped=false;
+    autoPagePaused=false;
+    autoPagePending=false;
+    savedScroll=null;
+    clearTimeout(pageTimeout); pageTimeout=null;
+    clearTimeout(checkTimeout); checkTimeout=null;
+    $('moreStatus').textContent='';
+    $('loadMoreBtn').style.display='none';
+  }
+  function ensureImageGrid() {
+    let grid=$('galleryMount').querySelector('.image-grid');
+    if (!grid) {
+      grid=document.createElement('div');
+      grid.className='image-grid';
+      $('galleryMount').appendChild(grid);
+    }
+    return grid;
+  }
   function imageReady(gname, query, promotions, results, container) {
-    // The Search Element officially supports replacing the presentation of image results.
-    // Google still owns the search, pagination, ad placement and attribution.
     if (gname !== 'productSearch') return false;
+    // Older network responses must not overwrite a newer search.
+    if (activeQuery && query !== activeQuery) {
+      container.replaceChildren();
+      return true;
+    }
     try {
-      if (galleryQuery !== query) {
-        galleryQuery=query;
-        galleryItems=[];
-        autoPageStopped=false;
-        hasAnyImages=false;
+      if (galleryQuery !== query) resetGallery(query);
+      const mount=$('galleryMount');
+      // Google's callback allows a completely custom display of the result objects.
+      // The display lives outside Google's per-page DOM so it is never torn down
+      // when Google replaces a page of results.
+      if (Array.isArray(promotions) && promotions.length) {
+        const promotionKey='promotions:'+query;
+        if (!galleryKeys.has(promotionKey)) {
+          const area=document.createElement('div'); area.className='promotions';
+          const label=document.createElement('div'); label.className='promotions-label';
+          label.textContent='Sponsored results'; area.appendChild(label);
+          for (const promo of promotions) {
+            if (!promo.url || !/^https?:\/\//i.test(promo.url)) continue;
+            const a=document.createElement('a'); a.href=promo.url;
+            a.target='_blank'; a.rel='noopener noreferrer sponsored';
+            a.textContent=promo.title || promo.visibleUrl || 'Sponsored result';
+            area.appendChild(a);
+          }
+          if (area.querySelector('a')) mount.appendChild(area);
+          galleryKeys.add(promotionKey);
+        }
       }
-      const seen = new Set(galleryItems.map(x => x.key));
-      const nextItems=[];
+      const grid=ensureImageGrid();
+      let newlyAdded=0;
       for (const result of (results || [])) {
-        const imageUrl = result.thumbnailImage?.url || result.image?.url;
-        const pageUrl = result.contextUrl || result.url;
+        const imageUrl=result.thumbnailImage?.url || result.image?.url;
+        const pageUrl=result.contextUrl || result.url;
         if (!imageUrl || !pageUrl || !/^https?:\/\//i.test(imageUrl) || !/^https?:\/\//i.test(pageUrl)) continue;
         const key=result.image?.url || imageUrl;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        nextItems.push({key, imageUrl, pageUrl, title:result.titleNoFormatting || result.title || 'AliExpress product'});
-      }
-      galleryItems.push(...nextItems);
-      lastLoadedCount=nextItems.length;
-      hasAnyImages=galleryItems.length>0;
-      const content=document.createElement('div');
-      // Render any Google promotions explicitly rather than suppressing them.
-      if (Array.isArray(promotions) && promotions.length) {
-        const area=document.createElement('div'); area.className='promotions';
-        const label=document.createElement('div'); label.className='promotions-label'; label.textContent='Sponsored results'; area.appendChild(label);
-        for (const promo of promotions) {
-          if (!promo.url || !/^https?:\/\//i.test(promo.url)) continue;
-          const anchor=document.createElement('a'); anchor.href=promo.url;
-          anchor.target='_blank'; anchor.rel='noopener noreferrer sponsored';
-          anchor.textContent=promo.title || promo.visibleUrl || 'Sponsored result'; area.appendChild(anchor);
-        }
-        content.appendChild(area);
-      }
-      const grid=document.createElement('div'); grid.className='image-grid';
-      for (const item of galleryItems) {
-        const a=document.createElement('a'); a.className='image-tile'; a.href=item.pageUrl; a.target='_blank'; a.rel='noopener noreferrer';
-        a.title=item.title;
-        const img=document.createElement('img'); img.src=item.imageUrl; img.loading='lazy'; img.alt=item.title; img.referrerPolicy='no-referrer';
-        const title=document.createElement('span'); title.className='image-tile-label'; title.textContent=item.title;
+        if (galleryKeys.has(key)) continue;
+        galleryKeys.add(key);
+        const titleText=result.titleNoFormatting || result.title || 'AliExpress product';
+        const a=document.createElement('a'); a.className='image-tile';
+        a.href=pageUrl; a.target='_blank'; a.rel='noopener noreferrer'; a.title=titleText;
+        const img=document.createElement('img');
+        img.src=imageUrl; img.loading='lazy'; img.alt=titleText; img.referrerPolicy='no-referrer';
+        const title=document.createElement('span'); title.className='image-tile-label'; title.textContent=titleText;
         a.append(img,title); grid.appendChild(a);
+        newlyAdded++;
       }
-      content.appendChild(grid);
-      container.replaceChildren(content);
-      autoPagePending=false;
-      $('moreStatus').textContent='';
+      lastLoadedCount=newlyAdded;
+      hasAnyImages=grid.children.length>0;
+      // Google's search element continues to render its standard pagination/footer.
+      // Custom thumbnails and sponsored links are displayed above it.
+      container.replaceChildren();
       return true;
     } catch (error) {
+      // Preserve the built-in Search Element as a fallback if custom rendering fails.
+      return false;
+    }
+  }
+  function findNextPage() {
+    const pages=Array.from($('googleInlineMount').querySelectorAll('.gsc-cursor-page'));
+    const selected=pages.findIndex(p=>p.classList.contains('gsc-cursor-current-page'));
+    return selected>=0 ? (pages[selected+1] || null) : null;
+  }
+  function updateMoreUI() {
+    const next=hasAnyImages && !autoPageStopped ? findNextPage() : null;
+    const btn=$('loadMoreBtn');
+    // Keep manual loading as a fallback for Google pagination/browser restrictions.
+    btn.style.display=next ? 'block' : 'none';
+    btn.disabled=autoPagePending;
+    btn.textContent=autoPagePending ? 'Loading images…' : (autoPagePaused ? 'Try loading more' : 'Load more images');
+  }
+  function maybeAutoPage() {
+    if (!hasAnyImages || autoPagePending || autoPageStopped || autoPagePaused || !currentId) return;
+    if (document.visibilityState==='hidden') return;
+    if (Date.now()-lastPageClickAt<1050) return;
+    const rect=$('loadTrigger').getBoundingClientRect();
+    if (rect.top>window.innerHeight+450 || rect.bottom<0) return;
+    requestNextPage(false);
+  }
+  function requestNextPage(manual) {
+    if (!hasAnyImages || autoPagePending || autoPageStopped) return false;
+    if (manual) autoPagePaused=false;
+    const next=findNextPage();
+    if (!next) {
+      autoPageStopped=true;
+      $('moreStatus').textContent='End of available Google results.';
+      updateMoreUI();
+      return false;
+    }
+    autoPagePending=true;
+    savedScroll=window.scrollY;
+    lastPageClickAt=Date.now();
+    $('moreStatus').textContent='Loading more images…';
+    updateMoreUI();
+    try { next.click(); }
+    catch(e) {
       autoPagePending=false;
-      return false; // Let Google show its own results if our custom layout encounters a problem.
+      autoPagePaused=true;
+      $('moreStatus').textContent='Unable to load automatically. Use Google’s page links below.';
+      updateMoreUI();
+      return false;
     }
+    clearTimeout(pageTimeout);
+    pageTimeout=setTimeout(()=>{
+      if (!autoPagePending) return;
+      autoPagePending=false;
+      autoPagePaused=true;
+      savedScroll=null;
+      $('moreStatus').textContent='Automatic loading paused. Tap Load more or use Google’s page links.';
+      updateMoreUI();
+    },12000);
+    return true;
   }
-  function onResultsRendered() {
+  function onResultsRendered(gname, query) {
+    if (gname !== 'productSearch' || (activeQuery && query!==activeQuery)) return;
     clearLoading();
-    if (autoPagePending) autoPagePending=false;
-    if (savedScroll) {
-      const pos=savedScroll; savedScroll=0;
-      requestAnimationFrame(()=>{ window.scrollTo(0,pos); });
+    const wasLoading=autoPagePending;
+    clearTimeout(pageTimeout); pageTimeout=null;
+    autoPagePending=false;
+    if (wasLoading && lastLoadedCount===0) {
+      // Stop rather than repeatedly asking Google for the same page.
+      autoPageStopped=true;
+      $('moreStatus').textContent='No additional unique results on this page.';
+    } else if (wasLoading) {
+      $('moreStatus').textContent='';
     }
+    // Google may scroll to its own result block on a page change.
+    // Restoring the position after its render prevents a jump to the top.
+    if (savedScroll!==null) {
+      const y=savedScroll; savedScroll=null;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo(0,y)));
+    }
+    // The Search Element builds the page cursor around this callback, so wait
+    // until the footer has finished rendering before inspecting the next page.
+    clearTimeout(checkTimeout);
+    checkTimeout=setTimeout(()=>{
+      if (!findNextPage() && hasAnyImages && !autoPagePending) {
+        autoPageStopped=true;
+        if (!$('moreStatus').textContent) $('moreStatus').textContent='End of available Google results.';
+      }
+      updateMoreUI();
+      // IntersectionObserver also runs when the sentinel is moved by new rows.
+      // One delayed check supports browsers with inconsistent observer events.
+      maybeAutoPage();
+    },400);
   }
+  function beginAutoPaging() {
+    if ('IntersectionObserver' in window) {
+      galleryObserver=new IntersectionObserver((entries)=>{
+        if (entries.some(e=>e.isIntersecting)) maybeAutoPage();
+      },{rootMargin:'0px 0px 450px 0px',threshold:0});
+      galleryObserver.observe($('loadTrigger'));
+    }
+    window.addEventListener('scroll',()=>{
+      if(scrollFrame) return;
+      scrollFrame=true;
+      requestAnimationFrame(()=>{scrollFrame=false; maybeAutoPage();});
+    },{passive:true});
+    $('loadMoreBtn').addEventListener('click',()=>requestNextPage(true));
+  }
+  beginAutoPaging();
   // Explicit Google Search Element rendering keeps the results anchored inside the
   // app, rather than letting Google's automatic parser create an overlay widget.
   // The engine should also be set to Look and Feel > Layout > Results only.
@@ -463,38 +599,6 @@
     initializationCallback: initSearchElement,
     searchCallbacks: { image: { ready: imageReady, rendered: onResultsRendered } }
   };
-  function maybeAutoPage() {
-    if (!hasAnyImages || autoPagePending || autoPageStopped || !currentId || !galleryItems.length) return;
-    if (!document.querySelector('#resultsArea .image-grid')) return;
-    const results=$('resultsArea');
-    const r=results.getBoundingClientRect();
-    if (r.bottom>window.innerHeight+520 || r.top>window.innerHeight || r.bottom<0) return;
-    const pages=Array.from(results.querySelectorAll('.gsc-cursor-page'));
-    const current=pages.findIndex(e=>e.classList.contains('gsc-cursor-current-page'));
-    const target=current>=0 ? pages[current+1] : null;
-    if (!target || lastLoadedCount===0) {
-      autoPageStopped=true;
-      $('moreStatus').textContent='End of available Google results.';
-      return;
-    }
-    autoPagePending=true;
-    savedScroll=window.scrollY;
-    $('moreStatus').textContent='Loading more images…';
-    target.click();
-    window.setTimeout(()=>{
-      if (autoPagePending) {
-        autoPagePending=false;
-        autoPageStopped=true;
-        $('moreStatus').textContent='Automatic loading paused. Use Google’s page links below to continue.';
-      }
-    },12000);
-  }
-  window.addEventListener('scroll',()=>{
-    if(scrollFrame) return;
-    scrollFrame=true;
-    requestAnimationFrame(()=>{ scrollFrame=false; maybeAutoPage(); });
-  },{passive:true});
-
   function runQueued() {
     const control=getControl();
     if(!control || !queued || running) return false;
@@ -536,9 +640,8 @@
     updatePreview();
     const q=buildQuery(base);
     queued=q;
-    galleryQuery=q; galleryItems=[]; autoPagePending=false; autoPageStopped=false;
-    lastLoadedCount=0; hasAnyImages=false; savedScroll=0;
-    $('moreStatus').textContent='';
+    activeQuery=q;
+    resetGallery(q);
     if(!currentId) { write(PENDING_KEY,JSON.stringify({base})); showModal(); return; }
     if(base) saveRecent(base);
     empty.style.display='none';
