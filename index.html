@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="./icon-180.png">
   <link rel="icon" type="image/png" href="./icon-192.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <title>Visual Search — Product image finder · v6</title>
+  <title>Visual Search — Product image finder · v9</title>
   <style>
     :root { color-scheme: light; --ink:#192239; --muted:#69748a; --line:#e8ebf1; --surface:#fff; --bg:#f7f8fb; --accent:#ec653f; --soft:#fff3ed; --radius:20px; }
     * { box-sizing:border-box; }
@@ -275,6 +275,15 @@
   let hasAnyImages=false;
   let pageTimeout=null;
   let checkTimeout=null;
+  let autoLoadTimer=null;
+  let lastUserActivity=0;
+  let loadGeneration=0;
+  let pagesLoaded=0;
+  let autoLoadEnabled=true;
+  const MAX_PAGES=10;
+  // Wait until the screen has been idle before launching Google's next page.
+  const USER_IDLE_MS=1300;
+  const PAGE_GAP_MS=350;
   let activeQuery='';
 
   function read(key, fallbackValue='') { try { return localStorage.getItem(key) || fallbackValue; } catch(e) { return fallbackValue; } }
@@ -368,6 +377,10 @@
   function setLoading(message) { status.style.display='flex'; statusText.textContent=message; }
   function clearLoading() { status.style.display='none'; }
   function resetGallery(query) {
+    loadGeneration++;
+    clearTimeout(autoLoadTimer); autoLoadTimer=null;
+    pagesLoaded=0;
+    autoLoadEnabled=true;
     galleryQuery=query;
     galleryKeys=new Set();
     $('galleryMount').replaceChildren();
@@ -379,7 +392,40 @@
     clearTimeout(pageTimeout); pageTimeout=null;
     clearTimeout(checkTimeout); checkTimeout=null;
     $('moreStatus').textContent='';
+    $('scopeLabel').textContent='AliExpress only';
     $('loadMoreBtn').style.display='none';
+  }
+  // Only actual input events count as user scrolling. Google itself can change scrollY.
+  // During an in-flight request, preserve the most recent user-selected position.
+  function noteUserActivity() {
+    lastUserActivity=Date.now();
+    if (pagePending && savedScroll!==null) {
+      requestAnimationFrame(()=>{
+        if (pagePending && savedScroll!==null) savedScroll=window.scrollY;
+      });
+    }
+  }
+  for (const eventName of ['touchstart','touchmove','wheel','pointerdown','keydown']) {
+    window.addEventListener(eventName,noteUserActivity,{passive:true});
+  }
+  function scheduleNextPage() {
+    clearTimeout(autoLoadTimer);
+    if (!autoLoadEnabled || !hasAnyImages || pagePending || pageStopped || pagesLoaded>=MAX_PAGES) return;
+    const generation=loadGeneration;
+    function attempt() {
+      if (generation!==loadGeneration || !autoLoadEnabled || pagePending || pageStopped) return;
+      if (document.visibilityState==='hidden') {
+        autoLoadTimer=setTimeout(attempt,1200);
+        return;
+      }
+      const remaining=USER_IDLE_MS-(Date.now()-lastUserActivity);
+      if (remaining>0) {
+        autoLoadTimer=setTimeout(attempt,remaining+70);
+        return;
+      }
+      requestNextPage(); // Exactly the same function as V6's manual Load more button.
+    }
+    autoLoadTimer=setTimeout(attempt,PAGE_GAP_MS);
   }
   function ensureImageGrid() {
     let grid=$('galleryMount').querySelector('.image-grid');
@@ -440,6 +486,12 @@
       }
       lastLoadedCount=newlyAdded;
       hasAnyImages=grid.children.length>0;
+      if (pagesLoaded===0) pagesLoaded=1;
+      else if (pagePending) pagesLoaded=Math.min(MAX_PAGES,pagesLoaded+1);
+      $('scopeLabel').textContent=`${grid.children.length} images`;
+      if (autoLoadEnabled && pagesLoaded<MAX_PAGES) {
+        $('moreStatus').textContent=`Loading available result pages (${pagesLoaded}/${MAX_PAGES})…`;
+      }
       // Google's search element continues to render its standard pagination/footer.
       // Custom thumbnails and sponsored links are displayed above it.
       container.replaceChildren();
@@ -457,13 +509,13 @@
   function updateMoreUI() {
     const next=hasAnyImages && !pageStopped ? findNextPage() : null;
     const btn=$('loadMoreBtn');
-    // More results load only after the user presses the button.
-    btn.style.display=next ? 'block' : 'none';
+    // Keep manual Load more as a fallback if the automatic sequence stops.
+    btn.style.display=(next && (!autoLoadEnabled || pageStopped)) ? 'block' : 'none';
     btn.disabled=pagePending;
     btn.textContent=pagePending ? 'Loading images…' : 'Load more images';
   }
   function requestNextPage() {
-    if (!hasAnyImages || pagePending || pageStopped) return false;
+    if (!hasAnyImages || pagePending || pageStopped || pagesLoaded>=MAX_PAGES) return false;
     const next=findNextPage();
     if (!next) {
       pageStopped=true;
@@ -473,12 +525,23 @@
     }
     pagePending=true;
     savedScroll=window.scrollY;
-    $('moreStatus').textContent='Loading more images…';
+    $('moreStatus').textContent=autoLoadEnabled
+      ? `Loading available result pages (${pagesLoaded}/${MAX_PAGES})…`
+      : 'Loading more images…';
     updateMoreUI();
-    try { next.click(); }
+    try {
+      next.click();
+      // Google sometimes scrolls the main page as a side effect of clicking its pager.
+      // Restore the location promptly, and again after Google's result render completes.
+      const initialScroll=savedScroll;
+      requestAnimationFrame(()=>{
+        if (pagePending && savedScroll===initialScroll) window.scrollTo(0,initialScroll);
+      });
+    }
     catch(e) {
       pagePending=false;
-      $('moreStatus').textContent='Unable to load the next page. Try again or use Google’s page links.';
+      autoLoadEnabled=false;
+      $('moreStatus').textContent='Unable to load the next page. You can retry manually.';
       updateMoreUI();
       return false;
     }
@@ -487,7 +550,8 @@
       if (!pagePending) return;
       pagePending=false;
       savedScroll=null;
-      $('moreStatus').textContent='Loading timed out. Tap Load more to retry or use Google’s page links.';
+      autoLoadEnabled=false;
+      $('moreStatus').textContent='Automatic loading timed out. Tap Load more to retry.';
       updateMoreUI();
     },12000);
     return true;
@@ -502,7 +566,7 @@
       // Stop rather than repeatedly asking Google for the same page.
       pageStopped=true;
       $('moreStatus').textContent='No additional unique results on this page.';
-    } else if (wasLoading) {
+    } else if (wasLoading && !autoLoadEnabled) {
       $('moreStatus').textContent='';
     }
     // Google may scroll to its own result block on a page change.
@@ -514,16 +578,25 @@
     // The Search Element builds the page cursor around this callback, so wait
     // until the footer has finished rendering before inspecting the next page.
     clearTimeout(checkTimeout);
+    const generation=loadGeneration;
     checkTimeout=setTimeout(()=>{
+      if (generation!==loadGeneration) return;
       if (!findNextPage() && hasAnyImages && !pagePending) {
         pageStopped=true;
-        if (!$('moreStatus').textContent) $('moreStatus').textContent='End of available Google results.';
+      }
+      if (pagesLoaded>=MAX_PAGES || pageStopped) {
+        autoLoadEnabled=false;
+        $('moreStatus').textContent=`Finished loading ${pagesLoaded} available page${pagesLoaded===1?'':'s'}.`;
       }
       updateMoreUI();
+      if (!pageStopped && pagesLoaded<MAX_PAGES) scheduleNextPage();
     },400);
   }
-  // Pagination is manual: scrolling never requests additional results.
-  $('loadMoreBtn').addEventListener('click',requestNextPage);
+  // The same next-page function works for both automatic and manual loading.
+  $('loadMoreBtn').addEventListener('click',()=>{
+    autoLoadEnabled=false;
+    requestNextPage();
+  });
   // Explicit Google Search Element rendering keeps the results anchored inside the
   // app, rather than letting Google's automatic parser create an overlay widget.
   // The engine should also be set to Look and Feel > Layout > Results only.
