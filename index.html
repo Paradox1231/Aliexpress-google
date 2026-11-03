@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="./icon-180.png">
   <link rel="icon" type="image/png" href="./icon-192.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <title>Visual Search — Product image finder · v3</title>
+  <title>Visual Search — Product image finder · v4</title>
   <style>
     :root { color-scheme: light; --ink:#192239; --muted:#69748a; --line:#e8ebf1; --surface:#fff; --bg:#f7f8fb; --accent:#ec653f; --soft:#fff3ed; --radius:20px; }
     * { box-sizing:border-box; }
@@ -21,7 +21,8 @@
     button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
     button:focus-visible, input:focus-visible, a:focus-visible { outline:3px solid #9bcef8; outline-offset:3px; }
     a { color:#b44727; }
-    .app { width:100%; max-width:1120px; margin:0 auto; padding:calc(env(safe-area-inset-top) + 18px) 10px calc(env(safe-area-inset-bottom) + 36px); }
+    html, body { width:100%; max-width:100%; overflow-x:clip; }
+    .app { width:100%; min-width:0; max-width:1120px; margin:0 auto; padding:calc(env(safe-area-inset-top) + 18px) 10px calc(env(safe-area-inset-bottom) + 36px); }
     .header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:29px; }
     .brand { display:flex; gap:11px; align-items:center; }
     .logo { display:grid; place-items:center; width:43px; height:43px; border-radius:14px; background:var(--ink); color:white; flex:none; }
@@ -29,6 +30,8 @@
     .brand-sub { display:block; margin-top:2px; color:var(--muted); font-size:11px; letter-spacing:.2px; }
     .icon-btn { border:1px solid var(--line); background:#fff; width:43px; height:43px; border-radius:14px; display:grid; place-items:center; color:var(--ink); }
     .intro { padding:0 1px 18px; }
+    body.has-searched .intro { display:none; }
+    body.has-searched .header { padding-bottom:15px; }
     .eyebrow { display:flex; gap:7px; align-items:center; color:var(--accent); font-size:11px; font-weight:800; letter-spacing:1.3px; text-transform:uppercase; }
     h1 { font-size:clamp(31px,6.8vw,44px); line-height:1.13; letter-spacing:-1.5px; margin:9px 0 10px; font-weight:800; }
     .desc { font-size:14px; color:var(--muted); line-height:1.5; margin:0; }
@@ -84,7 +87,10 @@
     .empty-icon { display:grid; place-items:center; width:60px; height:60px; margin-bottom:13px; color:#dd8f74; background:#fff2ec; border-radius:19px; }
     .empty-title { font-weight:750; font-size:15px; margin:0 0 7px; }
     .empty-copy { font-size:13px; line-height:1.5; color:var(--muted); margin:0; max-width:280px; }
-    #resultsArea { width:100%; min-width:0; min-height:0; }
+    #resultsArea, #googleInlineMount { display:block; width:100%; max-width:100%; min-width:0; min-height:0; }
+    #resultsArea .gsc-control-cse { padding:0 !important; border:0 !important; background:transparent !important; }
+    #resultsArea .gsc-results-wrapper-visible { min-width:0 !important; overflow-wrap:anywhere; }
+    #resultsArea .gsc-tabHeader { max-width:100%; }
     #resultsArea .gsc-control-cse, #resultsArea .gsc-results-wrapper-visible,
     #resultsArea .gsc-results, #resultsArea .gsc-resultsRoot { width:100% !important; max-width:none !important; }
     /* Images below are rendered from the officially supported Search Element image ready callback. */
@@ -202,7 +208,8 @@
         </div>
         <div id="searchStatus" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="statusText">Loading image search…</span></div>
         <div id="resultsArea">
-          <div class="gcse-searchresults-only" data-gname="productSearch" data-defaultToImageSearch="true" data-disableWebSearch="true" data-enableImageSearch="true" data-imageSearchLayout="classic" data-image_as_sitesearch="aliexpress.com" data-mobileLayout="disabled" data-imageSearchResultSetSize="20" data-resultSetSize="20" data-linkTarget="_blank" data-autoSearchOnLoad="false"></div>
+          <!-- Google Search Element is rendered directly here by the documented Control API. -->
+          <div id="googleInlineMount"></div>
         </div>
         <p id="moreStatus" class="more-status" aria-live="polite"></p>
       </div>
@@ -218,7 +225,7 @@
     <ol class="steps">
       <li>Open <a href="https://programmablesearchengine.google.com/controlpanel/all" target="_blank" rel="noopener noreferrer">Google Programmable Search</a> and create an engine.</li>
       <li>Under <strong>Sites to search</strong>, add <strong>aliexpress.com</strong>.</li>
-      <li>Turn <strong>Image search</strong> on. Under <strong>Look and Feel → Layout</strong>, choose <strong>Results Only</strong> (not Overlay).</li>
+      <li>Turn <strong>Image search</strong> on. Under <strong>Look and Feel → Layout</strong>, select <strong>Results only</strong>, then <strong>Save</strong> (not Overlay).</li>
       <li>In the engine's <strong>Overview → Basic</strong> section, copy the <strong>Search engine ID</strong>.</li>
     </ol>
     <form id="setupForm">
@@ -416,8 +423,46 @@
       requestAnimationFrame(()=>{ window.scrollTo(0,pos); });
     }
   }
-  // Official Search Element callbacks; default Google pagination/branding is retained.
-  window.__gcse={ searchCallbacks:{ image:{ ready:imageReady, rendered:onResultsRendered } } };
+  // Explicit Google Search Element rendering keeps the results anchored inside the
+  // app, rather than letting Google's automatic parser create an overlay widget.
+  // The engine should also be set to Look and Feel > Layout > Results only.
+  function initSearchElement() {
+    const mount = () => {
+      try {
+        const api = window.google && google.search && google.search.cse && google.search.cse.element;
+        if (!api || api.getElement('productSearch')) return;
+        api.render({
+          div: 'googleInlineMount',
+          tag: 'searchresults-only',
+          gname: 'productSearch',
+          attributes: {
+            enableImageSearch: true,
+            defaultToImageSearch: true,
+            disableWebSearch: true,
+            imageSearchLayout: 'classic',
+            image_as_sitesearch: 'aliexpress.com',
+            mobileLayout: 'disabled',
+            imageSearchResultSetSize: 20,
+            resultSetSize: 20,
+            linkTarget: '_blank',
+            autoSearchOnLoad: false
+          }
+        });
+      } catch (error) {
+        clearLoading();
+        empty.style.display='flex';
+        $('emptyCopy').textContent='Google search could not initialize inline. In Google Programmable Search, set Look and Feel > Layout to Results only, then reload.';
+      }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',mount,{once:true});
+    else mount();
+  }
+  // Official Search Element callbacks; Google still controls attribution and page links.
+  window.__gcse={
+    parsetags: 'explicit',
+    initializationCallback: initSearchElement,
+    searchCallbacks: { image: { ready: imageReady, rendered: onResultsRendered } }
+  };
   function maybeAutoPage() {
     if (!hasAnyImages || autoPagePending || autoPageStopped || !currentId || !galleryItems.length) return;
     if (!document.querySelector('#resultsArea .image-grid')) return;
@@ -497,6 +542,7 @@
     if(!currentId) { write(PENDING_KEY,JSON.stringify({base})); showModal(); return; }
     if(base) saveRecent(base);
     empty.style.display='none';
+    document.body.classList.add('has-searched');
     fallback.href='https://www.google.com/search?tbm=isch&q='+encodeURIComponent('site:aliexpress.com '+q);
     fallback.style.display='inline';
     setLoading('Searching for “'+q+'”…');
