@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="./icon-180.png">
   <link rel="icon" type="image/png" href="./icon-192.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <title>Visual Search — Product image finder · v7</title>
+  <title>Visual Search — Product image finder · v8</title>
   <style>
     :root { color-scheme: light; --ink:#192239; --muted:#69748a; --line:#e8ebf1; --surface:#fff; --bg:#f7f8fb; --accent:#ec653f; --soft:#fff3ed; --radius:20px; }
     * { box-sizing:border-box; }
@@ -271,7 +271,10 @@
   let galleryQuery='';
   let galleryKeys=new Set();
   const MAX_PAGES=10; // Google caps this Search Element's filtered set at approximately 100 results.
-  const PAGE_GAP_MS=850; // Avoid firing page requests in a tight loop.
+  // Short pauses are enough for Google's pager to settle between requests.
+  // Actual download speed is still controlled by Google and the network.
+  const PAGE_GAP_MS=220;
+  const PAGE_SETTLE_MS=180;
   let pagePending=false;
   let pageStopped=false;
   let lastLoadedCount=0;
@@ -400,7 +403,7 @@
     $('scopeLabel').textContent='AliExpress only';
     $('loadMoreBtn').style.display='none';
   }
-  function gridCount() { return $('galleryMount').querySelectorAll('.image-tile').length; }
+  function gridCount() { return $('galleryMount').querySelector('.image-grid')?.children.length || 0; }
   function updatePageStatus() {
     if (!pagesLoaded) return;
     const count=gridCount();
@@ -408,7 +411,7 @@
       ? `Loading pages ${pagesLoaded}/${MAX_PAGES}`
       : `${count} images · ${pagesLoaded} page${pagesLoaded===1?'':'s'}`;
     $('moreStatus').textContent=loadAllActive
-      ? `Gathering available Google results: ${pagesLoaded} of up to ${MAX_PAGES} pages (${count} unique images).`
+      ? `${count} images ready. Loading remaining Google pages (${pagesLoaded}/${MAX_PAGES})…`
       : `Showing ${count} unique images from ${pagesLoaded} available page${pagesLoaded===1?'':'s'}.`;
   }
   function finishPageLoading(reason='') {
@@ -462,6 +465,7 @@
       }
       const grid=ensureImageGrid();
       let newlyAdded=0;
+      const batch=document.createDocumentFragment();
       for (const result of (results || [])) {
         const imageUrl=result.thumbnailImage?.url || result.image?.url;
         const pageUrl=result.contextUrl || result.url;
@@ -473,11 +477,13 @@
         const a=document.createElement('a'); a.className='image-tile';
         a.href=pageUrl; a.target='_blank'; a.rel='noopener noreferrer'; a.title=titleText;
         const img=document.createElement('img');
-        img.src=imageUrl; img.loading='lazy'; img.alt=titleText; img.referrerPolicy='no-referrer';
+        img.loading=(pagesLoaded===0 && newlyAdded<4) ? 'eager' : 'lazy';
+        img.decoding='async'; img.alt=titleText; img.referrerPolicy='no-referrer'; img.src=imageUrl;
         const title=document.createElement('span'); title.className='image-tile-label'; title.textContent=titleText;
-        a.append(img,title); grid.appendChild(a);
+        a.append(img,title); batch.appendChild(a);
         newlyAdded++;
       }
+      if(newlyAdded) grid.appendChild(batch);
       lastLoadedCount=newlyAdded;
       hasAnyImages=grid.children.length>0;
       // The first successful response is page 1; each requested next page adds one.
@@ -577,7 +583,7 @@
       autoNextTimer=setTimeout(()=>{
         if (generation===renderedGeneration && loadAllActive) requestNextPage();
       },PAGE_GAP_MS);
-    },420);
+    },PAGE_SETTLE_MS);
   }
   $('loadMoreBtn').addEventListener('click',()=>{
     // Optional recovery only; never activated by scrolling.
