@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="./icon-180.png">
   <link rel="icon" type="image/png" href="./icon-192.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <title>Visual Search — Product image finder</title>
+  <title>Visual Search — Product image finder · v3</title>
   <style>
     :root { color-scheme: light; --ink:#192239; --muted:#69748a; --line:#e8ebf1; --surface:#fff; --bg:#f7f8fb; --accent:#ec653f; --soft:#fff3ed; --radius:20px; }
     * { box-sizing:border-box; }
@@ -21,7 +21,7 @@
     button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
     button:focus-visible, input:focus-visible, a:focus-visible { outline:3px solid #9bcef8; outline-offset:3px; }
     a { color:#b44727; }
-    .app { width:min(100%,820px); margin:0 auto; padding:calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 36px); }
+    .app { width:100%; max-width:1120px; margin:0 auto; padding:calc(env(safe-area-inset-top) + 18px) 10px calc(env(safe-area-inset-bottom) + 36px); }
     .header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:29px; }
     .brand { display:flex; gap:11px; align-items:center; }
     .logo { display:grid; place-items:center; width:43px; height:43px; border-radius:14px; background:var(--ink); color:white; flex:none; }
@@ -79,12 +79,29 @@
     .results-tools { display:flex; align-items:center; gap:9px; }
     .results-meta { font-size:11px; color:#8993a3; }
     .external-link { text-decoration:none; color:#ad482c; font-weight:750; font-size:11.5px; display:none; white-space:nowrap; }
-    .result-box { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px; min-height:240px; overflow:hidden; }
+    .result-box { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:5px; min-height:240px; width:100%; overflow:visible; }
     #emptyState { display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; min-height:216px; padding:8px 10px; }
     .empty-icon { display:grid; place-items:center; width:60px; height:60px; margin-bottom:13px; color:#dd8f74; background:#fff2ec; border-radius:19px; }
     .empty-title { font-weight:750; font-size:15px; margin:0 0 7px; }
     .empty-copy { font-size:13px; line-height:1.5; color:var(--muted); margin:0; max-width:280px; }
-    #resultsArea { width:100%; min-height:0; }
+    #resultsArea { width:100%; min-width:0; min-height:0; }
+    #resultsArea .gsc-control-cse, #resultsArea .gsc-results-wrapper-visible,
+    #resultsArea .gsc-results, #resultsArea .gsc-resultsRoot { width:100% !important; max-width:none !important; }
+    /* Images below are rendered from the officially supported Search Element image ready callback. */
+    .image-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; width:100%; }
+    .image-tile { display:block; min-width:0; border-radius:11px; overflow:hidden; border:1px solid #e8ebf1; background:white; text-decoration:none; color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.035); }
+    .image-tile:focus-visible { outline:3px solid #ec653f; outline-offset:1px; }
+    .image-tile img { width:100%; aspect-ratio:1 / 1; display:block; object-fit:contain; background:#f4f5f8; }
+    .image-tile-label { display:block; padding:7px 7px 8px; font-size:11px; font-weight:650; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .promotions { margin:0 0 10px; padding:9px; border:1px solid #e1e5eb; border-radius:10px; font-size:12px; }
+    .promotions a { display:block; margin-top:5px; overflow-wrap:anywhere; }
+    .promotions-label { color:#68758a; font-size:10px; }
+    .more-status { color:var(--muted); font-size:12px; text-align:center; padding:12px 6px; min-height:32px; }
+    .more-status:empty { display:none; }
+    #resultsArea .gsc-cursor-box { margin-top:8px !important; }
+    #resultsArea .gsc-cursor-page { padding:7px !important; }
+    @media(min-width:780px) { .image-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:11px; } }
+
     #searchStatus { display:none; align-items:center; gap:9px; font-size:12px; color:var(--muted); padding:4px 0 14px; }
     .spinner { width:15px; height:15px; border:2px solid #f4dfd9; border-top-color:var(--accent); border-radius:50%; animation:spin .85s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } }
@@ -109,8 +126,8 @@
     .save-btn { width:100%; padding:14px; border:0; background:var(--accent); color:white; border-radius:13px; font-weight:800; font-size:15px; }
     .modal-close { padding:4px; border:0; background:transparent; color:#7d899a; }
     .tiny { font-size:11px !important; }
-    @media(min-width:650px) { .app { padding:38px 28px 54px; } .header { padding-bottom:37px; } .intro { padding-bottom:24px; } .result-box { padding:22px; } }
-    @media(max-width:350px) { .app { padding-left:12px; padding-right:12px; } .search-btn { min-width:70px; padding:0 12px; } .result-box { padding:11px; } }
+    @media(min-width:650px) { .app { padding:38px 20px 54px; } .header { padding-bottom:26px; } .intro { padding-bottom:20px; } .result-box { padding:10px; } }
+    @media(max-width:350px) { .app { padding-left:7px; padding-right:7px; } .search-btn { min-width:70px; padding:0 12px; } .result-box { padding:4px; } }
     @media(prefers-reduced-motion:reduce) { .spinner { animation:none; } }
   </style>
 </head>
@@ -170,16 +187,6 @@
       </div>
     </section>
 
-    <section id="suggestionsSection" aria-label="Search suggestions">
-      <p class="section-label">Try a search</p>
-      <div class="chips" id="suggestions">
-        <button type="button" class="chip" data-query="Toyota Aurion body kit">Body kits</button>
-        <button type="button" class="chip" data-query="Car front lip splitter">Front lips</button>
-        <button type="button" class="chip" data-query="LED desk lighting">Desk lighting</button>
-        <button type="button" class="chip" data-query="Phone accessories">Phone accessories</button>
-      </div>
-    </section>
-
     <section id="recentsSection" aria-label="Recent searches">
       <div class="recent-header"><p class="section-label">Recent searches</p><button id="clearHistory" type="button" class="text-btn">Clear</button></div>
       <div class="chips" id="recents"></div>
@@ -191,12 +198,13 @@
         <div id="emptyState">
           <div class="empty-icon" aria-hidden="true"><svg width="29" height="29" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m3 17 5-5 4 4 3-3 6 6"/></svg></div>
           <p class="empty-title">Search products visually</p>
-          <p class="empty-copy" id="emptyCopy">Your image results will appear here. Enter a product name or choose a suggestion.</p>
+          <p class="empty-copy" id="emptyCopy">Your image results will appear here. Enter a product name above.</p>
         </div>
         <div id="searchStatus" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="statusText">Loading image search…</span></div>
         <div id="resultsArea">
-          <div class="gcse-searchresults-only" data-gname="productSearch" data-defaultToImageSearch="true" data-disableWebSearch="true" data-enableImageSearch="true" data-imageSearchLayout="column" data-image_as_sitesearch="aliexpress.com" data-mobileLayout="enabled" data-linkTarget="_blank" data-autoSearchOnLoad="false"></div>
+          <div class="gcse-searchresults-only" data-gname="productSearch" data-defaultToImageSearch="true" data-disableWebSearch="true" data-enableImageSearch="true" data-imageSearchLayout="classic" data-image_as_sitesearch="aliexpress.com" data-mobileLayout="disabled" data-imageSearchResultSetSize="20" data-resultSetSize="20" data-linkTarget="_blank" data-autoSearchOnLoad="false"></div>
         </div>
+        <p id="moreStatus" class="more-status" aria-live="polite"></p>
       </div>
     </section>
   </main>
@@ -210,7 +218,7 @@
     <ol class="steps">
       <li>Open <a href="https://programmablesearchengine.google.com/controlpanel/all" target="_blank" rel="noopener noreferrer">Google Programmable Search</a> and create an engine.</li>
       <li>Under <strong>Sites to search</strong>, add <strong>aliexpress.com</strong>.</li>
-      <li>Turn <strong>Image search</strong> on.</li>
+      <li>Turn <strong>Image search</strong> on. Under <strong>Look and Feel → Layout</strong>, choose <strong>Results Only</strong> (not Overlay).</li>
       <li>In the engine's <strong>Overview → Basic</strong> section, copy the <strong>Search engine ID</strong>.</li>
     </ol>
     <form id="setupForm">
@@ -245,6 +253,14 @@
   let running=false;
   let includes=[];
   let excludes=[];
+  let galleryItems=[];
+  let galleryQuery='';
+  let autoPagePending=false;
+  let autoPageStopped=false;
+  let lastLoadedCount=0;
+  let savedScroll=0;
+  let hasAnyImages=false;
+  let scrollFrame=false;
 
   function read(key, fallbackValue='') { try { return localStorage.getItem(key) || fallbackValue; } catch(e) { return fallbackValue; } }
   function write(key,value) { try { localStorage.setItem(key,value); return true; } catch(e) { return false; } }
@@ -336,9 +352,104 @@
   function getControl() { try { return window.google?.search?.cse?.element?.getElement?.('productSearch') || null; } catch(e) { return null; } }
   function setLoading(message) { status.style.display='flex'; statusText.textContent=message; }
   function clearLoading() { status.style.display='none'; }
-  function onResultsRendered() { clearLoading(); }
-  // Google provides the Search Element, including images, page links, and any ads.
-  window.__gcse={ searchCallbacks:{ image:{ rendered: onResultsRendered } } };
+  function imageReady(gname, query, promotions, results, container) {
+    // The Search Element officially supports replacing the presentation of image results.
+    // Google still owns the search, pagination, ad placement and attribution.
+    if (gname !== 'productSearch') return false;
+    try {
+      if (galleryQuery !== query) {
+        galleryQuery=query;
+        galleryItems=[];
+        autoPageStopped=false;
+        hasAnyImages=false;
+      }
+      const seen = new Set(galleryItems.map(x => x.key));
+      const nextItems=[];
+      for (const result of (results || [])) {
+        const imageUrl = result.thumbnailImage?.url || result.image?.url;
+        const pageUrl = result.contextUrl || result.url;
+        if (!imageUrl || !pageUrl || !/^https?:\/\//i.test(imageUrl) || !/^https?:\/\//i.test(pageUrl)) continue;
+        const key=result.image?.url || imageUrl;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        nextItems.push({key, imageUrl, pageUrl, title:result.titleNoFormatting || result.title || 'AliExpress product'});
+      }
+      galleryItems.push(...nextItems);
+      lastLoadedCount=nextItems.length;
+      hasAnyImages=galleryItems.length>0;
+      const content=document.createElement('div');
+      // Render any Google promotions explicitly rather than suppressing them.
+      if (Array.isArray(promotions) && promotions.length) {
+        const area=document.createElement('div'); area.className='promotions';
+        const label=document.createElement('div'); label.className='promotions-label'; label.textContent='Sponsored results'; area.appendChild(label);
+        for (const promo of promotions) {
+          if (!promo.url || !/^https?:\/\//i.test(promo.url)) continue;
+          const anchor=document.createElement('a'); anchor.href=promo.url;
+          anchor.target='_blank'; anchor.rel='noopener noreferrer sponsored';
+          anchor.textContent=promo.title || promo.visibleUrl || 'Sponsored result'; area.appendChild(anchor);
+        }
+        content.appendChild(area);
+      }
+      const grid=document.createElement('div'); grid.className='image-grid';
+      for (const item of galleryItems) {
+        const a=document.createElement('a'); a.className='image-tile'; a.href=item.pageUrl; a.target='_blank'; a.rel='noopener noreferrer';
+        a.title=item.title;
+        const img=document.createElement('img'); img.src=item.imageUrl; img.loading='lazy'; img.alt=item.title; img.referrerPolicy='no-referrer';
+        const title=document.createElement('span'); title.className='image-tile-label'; title.textContent=item.title;
+        a.append(img,title); grid.appendChild(a);
+      }
+      content.appendChild(grid);
+      container.replaceChildren(content);
+      autoPagePending=false;
+      $('moreStatus').textContent='';
+      return true;
+    } catch (error) {
+      autoPagePending=false;
+      return false; // Let Google show its own results if our custom layout encounters a problem.
+    }
+  }
+  function onResultsRendered() {
+    clearLoading();
+    if (autoPagePending) autoPagePending=false;
+    if (savedScroll) {
+      const pos=savedScroll; savedScroll=0;
+      requestAnimationFrame(()=>{ window.scrollTo(0,pos); });
+    }
+  }
+  // Official Search Element callbacks; default Google pagination/branding is retained.
+  window.__gcse={ searchCallbacks:{ image:{ ready:imageReady, rendered:onResultsRendered } } };
+  function maybeAutoPage() {
+    if (!hasAnyImages || autoPagePending || autoPageStopped || !currentId || !galleryItems.length) return;
+    if (!document.querySelector('#resultsArea .image-grid')) return;
+    const results=$('resultsArea');
+    const r=results.getBoundingClientRect();
+    if (r.bottom>window.innerHeight+520 || r.top>window.innerHeight || r.bottom<0) return;
+    const pages=Array.from(results.querySelectorAll('.gsc-cursor-page'));
+    const current=pages.findIndex(e=>e.classList.contains('gsc-cursor-current-page'));
+    const target=current>=0 ? pages[current+1] : null;
+    if (!target || lastLoadedCount===0) {
+      autoPageStopped=true;
+      $('moreStatus').textContent='End of available Google results.';
+      return;
+    }
+    autoPagePending=true;
+    savedScroll=window.scrollY;
+    $('moreStatus').textContent='Loading more images…';
+    target.click();
+    window.setTimeout(()=>{
+      if (autoPagePending) {
+        autoPagePending=false;
+        autoPageStopped=true;
+        $('moreStatus').textContent='Automatic loading paused. Use Google’s page links below to continue.';
+      }
+    },12000);
+  }
+  window.addEventListener('scroll',()=>{
+    if(scrollFrame) return;
+    scrollFrame=true;
+    requestAnimationFrame(()=>{ scrollFrame=false; maybeAutoPage(); });
+  },{passive:true});
+
   function runQueued() {
     const control=getControl();
     if(!control || !queued || running) return false;
@@ -380,6 +491,9 @@
     updatePreview();
     const q=buildQuery(base);
     queued=q;
+    galleryQuery=q; galleryItems=[]; autoPagePending=false; autoPageStopped=false;
+    lastLoadedCount=0; hasAnyImages=false; savedScroll=0;
+    $('moreStatus').textContent='';
     if(!currentId) { write(PENDING_KEY,JSON.stringify({base})); showModal(); return; }
     if(base) saveRecent(base);
     empty.style.display='none';
@@ -396,7 +510,6 @@
     includes=[]; excludes=[]; saveFilters(); renderFilters();
     $('filterFeedback').textContent='';
   });
-  $('suggestions').addEventListener('click',e=>{ const b=e.target.closest('button[data-query]'); if(b) search(b.dataset.query); });
   $('clearHistory').addEventListener('click',()=>{ del(HISTORY_KEY); renderRecent(); });
   $('settingsBtn').addEventListener('click',showModal);
   $('closeModal').addEventListener('click',closeModal);
