@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f8fb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Visual Search">
+  <meta name="description" content="Search product images on AliExpress using a site-specific Google Programmable Search Engine.">
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <link rel="icon" type="image/png" href="./icon-192.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <title>Visual Search — Product image finder</title>
+  <style>
+    :root { color-scheme: light; --ink:#192239; --muted:#69748a; --line:#e8ebf1; --surface:#fff; --bg:#f7f8fb; --accent:#ec653f; --soft:#fff3ed; --radius:20px; }
+    * { box-sizing:border-box; }
+    html { min-height:100%; -webkit-text-size-adjust:100%; }
+    body { margin:0; min-height:100vh; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color:var(--ink); background:var(--bg); overscroll-behavior-y:contain; }
+    button, input { font:inherit; }
+    button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
+    button:focus-visible, input:focus-visible, a:focus-visible { outline:3px solid #9bcef8; outline-offset:3px; }
+    a { color:#b44727; }
+    .app { width:min(100%,820px); margin:0 auto; padding:calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 36px); }
+    .header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:29px; }
+    .brand { display:flex; gap:11px; align-items:center; }
+    .logo { display:grid; place-items:center; width:43px; height:43px; border-radius:14px; background:var(--ink); color:white; flex:none; }
+    .brand-name { font-size:17px; font-weight:780; letter-spacing:-.5px; }
+    .brand-sub { display:block; margin-top:2px; color:var(--muted); font-size:11px; letter-spacing:.2px; }
+    .icon-btn { border:1px solid var(--line); background:#fff; width:43px; height:43px; border-radius:14px; display:grid; place-items:center; color:var(--ink); }
+    .intro { padding:0 1px 18px; }
+    .eyebrow { display:flex; gap:7px; align-items:center; color:var(--accent); font-size:11px; font-weight:800; letter-spacing:1.3px; text-transform:uppercase; }
+    h1 { font-size:clamp(31px,6.8vw,44px); line-height:1.13; letter-spacing:-1.5px; margin:9px 0 10px; font-weight:800; }
+    .desc { font-size:14px; color:var(--muted); line-height:1.5; margin:0; }
+    .search-card { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:11px; box-shadow:0 9px 30px rgba(23,36,67,.045); }
+    .search-form { display:flex; gap:8px; }
+    .input-wrap { border:1px solid #e5e8f0; border-radius:13px; display:flex; align-items:center; gap:9px; padding:0 12px; min-width:0; flex:1; background:#fbfcfe; color:#8893a5; }
+    .input-wrap:focus-within { border-color:#f4b5a1; background:#fff; box-shadow:0 0 0 3px #fce9e2; }
+    .search-input { width:100%; min-width:0; outline:0; border:0; background:transparent; height:49px; font-size:16px; color:var(--ink); }
+    .search-input::placeholder { color:#929bad; }
+    .search-btn { flex:none; background:var(--accent); border:0; color:white; border-radius:13px; padding:0 17px; min-width:80px; font-size:14px; font-weight:750; }
+    .search-btn:active { transform:scale(.98); }
+    .filters-panel { margin-top:14px; border-top:1px solid var(--line); padding:15px 3px 4px; }
+    .filters-top { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+    .filters-title { font-size:13px; font-weight:800; letter-spacing:-.1px; }
+    .filters-clear { color:#7b879b; background:none; border:0; font-size:12px; font-weight:650; padding:7px 2px; }
+    .filter-group + .filter-group { margin-top:16px; }
+    .filter-group-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .filter-group-name { font-size:12px; color:var(--ink); font-weight:750; }
+    .filter-marker { display:inline-grid; place-items:center; width:21px; height:21px; border-radius:7px; font-size:16px; font-weight:800; }
+    .filter-marker.include { color:#197357; background:#e9f7f0; }
+    .filter-marker.exclude { color:#b94643; background:#fff0ef; }
+    .filter-entry { display:flex; align-items:stretch; gap:8px; }
+    .filter-entry input { width:100%; min-width:0; height:44px; border:1px solid #e4e7ee; border-radius:11px; padding:0 12px; background:#fbfcfe; font-size:16px; color:var(--ink); flex:1; }
+    .filter-entry input:focus { outline:none; border-color:#f4b5a1; box-shadow:0 0 0 3px #fce9e2; background:#fff; }
+    .filter-add { flex:none; min-width:77px; padding:0 12px; font-size:13px; font-weight:750; color:#fff; background:#25324b; border:0; border-radius:11px; }
+    .filter-add:active { transform:scale(.98); }
+    .filter-tags { display:flex; flex-wrap:wrap; gap:7px; padding-top:9px; }
+    .filter-tags:empty { display:none; }
+    .filter-tag { display:inline-flex; align-items:center; gap:8px; padding:8px 9px 8px 11px; border-radius:10px; font-size:12px; font-weight:650; border:1px solid transparent; max-width:100%; text-align:left; overflow-wrap:anywhere; }
+    .filter-tag.include { background:#eaf8f1; color:#136344; border-color:#c9eadb; }
+    .filter-tag.exclude { background:#fff0ef; color:#aa3a35; border-color:#f6d5d1; }
+    .tag-x { font-size:17px; line-height:13px; opacity:.8; }
+    .query-preview { background:#f7f8fb; border-radius:12px; padding:12px; margin-top:17px; }
+    .query-title { color:#7b879a; font-size:10px; font-weight:800; letter-spacing:.9px; text-transform:uppercase; margin:0 0 7px; }
+    #compiledQuery { display:block; overflow-wrap:anywhere; white-space:normal; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; color:#29354c; line-height:1.55; }
+    .filter-hint { color:#8390a3; font-size:11px; margin:7px 0 0; line-height:1.4; }
+    .filter-feedback { font-size:12px; color:#b94643; margin:9px 0 0; }
+    .filter-feedback:empty { display:none; }
+    .section-label { color:#8490a2; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1.05px; margin:18px 0 10px; }
+    .chips { display:flex; flex-wrap:wrap; gap:8px; }
+    .chip { background:#fff; border:1px solid #e3e7ef; color:#3c475d; border-radius:100px; padding:10px 13px; line-height:1; font-size:12.5px; font-weight:600; }
+    .chip:active { background:var(--soft); }
+    .recent-header { display:flex; align-items:center; justify-content:space-between; }
+    .text-btn { border:0; padding:8px 0; background:none; color:var(--muted); font-size:12px; font-weight:650; }
+    #recentsSection { display:none; }
+    .results-top { display:flex; justify-content:space-between; gap:10px; align-items:center; margin:29px 1px 12px; }
+    .results-title { font-size:17px; letter-spacing:-.3px; font-weight:780; }
+    .results-tools { display:flex; align-items:center; gap:9px; }
+    .results-meta { font-size:11px; color:#8993a3; }
+    .external-link { text-decoration:none; color:#ad482c; font-weight:750; font-size:11.5px; display:none; white-space:nowrap; }
+    .result-box { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px; min-height:240px; overflow:hidden; }
+    #emptyState { display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; min-height:216px; padding:8px 10px; }
+    .empty-icon { display:grid; place-items:center; width:60px; height:60px; margin-bottom:13px; color:#dd8f74; background:#fff2ec; border-radius:19px; }
+    .empty-title { font-weight:750; font-size:15px; margin:0 0 7px; }
+    .empty-copy { font-size:13px; line-height:1.5; color:var(--muted); margin:0; max-width:280px; }
+    #resultsArea { width:100%; min-height:0; }
+    #searchStatus { display:none; align-items:center; gap:9px; font-size:12px; color:var(--muted); padding:4px 0 14px; }
+    .spinner { width:15px; height:15px; border:2px solid #f4dfd9; border-top-color:var(--accent); border-radius:50%; animation:spin .85s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .footer { text-align:center; color:#9aa3b2; font-size:11px; line-height:1.6; margin:19px auto 0; max-width:370px; }
+    /* Only the outer container is styled. Google owns its result content and ads. */
+    .gsc-control-cse { border:0 !important; padding:0 !important; background:transparent !important; }
+    .gsc-tabsArea { font-family:inherit; }
+    .modal-backdrop { position:fixed; inset:0; padding:24px 16px calc(24px + env(safe-area-inset-bottom)); background:rgba(16,25,44,.55); z-index:100; display:none; align-items:center; justify-content:center; overflow-y:auto; }
+    .modal-backdrop.open { display:flex; }
+    .modal { width:min(100%,460px); max-height:92vh; overflow:auto; border-radius:24px; padding:24px; background:white; box-shadow:0 20px 80px rgba(10,17,31,.25); }
+    .modal-head { display:flex; align-items:flex-start; gap:8px; justify-content:space-between; }
+    .modal h2 { font-size:22px; letter-spacing:-.6px; margin:0 0 9px; }
+    .modal p, .steps { font-size:13.5px; color:#657085; line-height:1.6; }
+    .steps { padding-left:21px; margin:14px 0 18px; }
+    .steps li { margin-bottom:7px; padding-left:3px; }
+    .steps strong { color:#2e3950; }
+    .setup-field { margin:8px 0 10px; }
+    .setup-field label { display:block; font-size:12px; font-weight:750; margin-bottom:8px; color:var(--ink); }
+    .setup-field input { width:100%; padding:14px 13px; border:1px solid #dfe3eb; border-radius:12px; font-size:16px; outline:0; }
+    .setup-field input:focus { border-color:var(--accent); }
+    .error { color:#c0352a !important; font-size:12px !important; min-height:15px; }
+    .save-btn { width:100%; padding:14px; border:0; background:var(--accent); color:white; border-radius:13px; font-weight:800; font-size:15px; }
+    .modal-close { padding:4px; border:0; background:transparent; color:#7d899a; }
+    .tiny { font-size:11px !important; }
+    @media(min-width:650px) { .app { padding:38px 28px 54px; } .header { padding-bottom:37px; } .intro { padding-bottom:24px; } .result-box { padding:22px; } }
+    @media(max-width:350px) { .app { padding-left:12px; padding-right:12px; } .search-btn { min-width:70px; padding:0 12px; } .result-box { padding:11px; } }
+    @media(prefers-reduced-motion:reduce) { .spinner { animation:none; } }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="11" height="11" rx="3"/><path d="m6 11 2.4-2.6 2 2 1.2-1.2"/><circle cx="16.5" cy="16.5" r="4"/><path d="m19.5 19.5 2.5 2.5"/></svg>
+      </div>
+      <div><div class="brand-name">Visual Search</div><span class="brand-sub">PRODUCT IMAGE FINDER</span></div>
+    </div>
+    <button class="icon-btn" id="settingsBtn" type="button" aria-label="Search engine settings" title="Search engine settings">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06-2 2-.06-.06A1.7 1.7 0 0 0 15.87 18a1.7 1.7 0 0 0-1.12 1.6V20h-3v-.4a1.7 1.7 0 0 0-1.13-1.6 1.7 1.7 0 0 0-1.86.34l-.06.06-2-2 .06-.06A1.7 1.7 0 0 0 7.1 15a1.7 1.7 0 0 0-1.6-1.12H5v-3h.5a1.7 1.7 0 0 0 1.6-1.13 1.7 1.7 0 0 0-.34-1.86L6.7 7.8l2-2 .06.06A1.7 1.7 0 0 0 10.62 6a1.7 1.7 0 0 0 1.13-1.6V4h3v.4A1.7 1.7 0 0 0 15.87 6a1.7 1.7 0 0 0 1.87-.34l.06-.06 2 2-.06.06A1.7 1.7 0 0 0 19.4 9.5a1.7 1.7 0 0 0 1.6 1.12h.5v3H21A1.7 1.7 0 0 0 19.4 15Z" transform="translate(-1.25 -0.25) scale(1.05)"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <section class="intro">
+      <div class="eyebrow"><span aria-hidden="true">●</span> ALIEXPRESS IMAGE DISCOVERY</div>
+      <h1>Find it by<br>looking for it.</h1>
+      <p class="desc">Search images from AliExpress product pages, all in one place.</p>
+    </section>
+
+    <section class="search-card" aria-label="Product search">
+      <form class="search-form" id="searchForm">
+        <div class="input-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7.5"/><path d="m17 17 4 4"/></svg>
+          <input id="searchInput" class="search-input" type="search" enterkeyhint="search" inputmode="search" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Search products…" aria-label="Search AliExpress products" maxlength="180">
+        </div>
+        <button class="search-btn" type="submit">Search</button>
+      </form>
+      <div class="filters-panel" aria-label="Include and exclude filters">
+        <div class="filters-top"><span class="filters-title">Search filters</span><button type="button" class="filters-clear" id="clearFilters">Clear all</button></div>
+        <div class="filter-group">
+          <div class="filter-group-head"><span class="filter-marker include" aria-hidden="true">+</span><label class="filter-group-name" for="includeInput">Must include</label></div>
+          <form class="filter-entry" id="includeForm">
+            <input id="includeInput" type="text" enterkeyhint="done" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Word or phrase to include" maxlength="80">
+            <button type="submit" class="filter-add">Add +</button>
+          </form>
+          <div id="includeTags" class="filter-tags" aria-label="Included words and phrases"></div>
+        </div>
+        <div class="filter-group">
+          <div class="filter-group-head"><span class="filter-marker exclude" aria-hidden="true">−</span><label class="filter-group-name" for="excludeInput">Must exclude</label></div>
+          <form class="filter-entry" id="excludeForm">
+            <input id="excludeInput" type="text" enterkeyhint="done" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Word or phrase to exclude" maxlength="80">
+            <button type="submit" class="filter-add">Add −</button>
+          </form>
+          <div id="excludeTags" class="filter-tags" aria-label="Excluded words and phrases"></div>
+        </div>
+        <div class="query-preview" aria-live="polite">
+          <p class="query-title">Your search will use</p>
+          <code id="compiledQuery">Enter a product search or add an included term</code>
+          <p class="filter-hint">Press Search to apply the current filters. Tap × on a filter to remove it.</p>
+        </div>
+        <p class="filter-feedback" id="filterFeedback" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="suggestionsSection" aria-label="Search suggestions">
+      <p class="section-label">Try a search</p>
+      <div class="chips" id="suggestions">
+        <button type="button" class="chip" data-query="Toyota Aurion body kit">Body kits</button>
+        <button type="button" class="chip" data-query="Car front lip splitter">Front lips</button>
+        <button type="button" class="chip" data-query="LED desk lighting">Desk lighting</button>
+        <button type="button" class="chip" data-query="Phone accessories">Phone accessories</button>
+      </div>
+    </section>
+
+    <section id="recentsSection" aria-label="Recent searches">
+      <div class="recent-header"><p class="section-label">Recent searches</p><button id="clearHistory" type="button" class="text-btn">Clear</button></div>
+      <div class="chips" id="recents"></div>
+    </section>
+
+    <section aria-label="Image results">
+      <div class="results-top"><span class="results-title">Image results</span><div class="results-tools"><span class="results-meta" id="scopeLabel">AliExpress only</span><a class="external-link" id="googleFallback" href="#" target="_blank" rel="noopener noreferrer">Google Images ↗</a></div></div>
+      <div class="result-box">
+        <div id="emptyState">
+          <div class="empty-icon" aria-hidden="true"><svg width="29" height="29" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m3 17 5-5 4 4 3-3 6 6"/></svg></div>
+          <p class="empty-title">Search products visually</p>
+          <p class="empty-copy" id="emptyCopy">Your image results will appear here. Enter a product name or choose a suggestion.</p>
+        </div>
+        <div id="searchStatus" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="statusText">Loading image search…</span></div>
+        <div id="resultsArea">
+          <div class="gcse-searchresults-only" data-gname="productSearch" data-defaultToImageSearch="true" data-disableWebSearch="true" data-enableImageSearch="true" data-imageSearchLayout="column" data-image_as_sitesearch="aliexpress.com" data-mobileLayout="enabled" data-linkTarget="_blank" data-autoSearchOnLoad="false"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="footer">Search results are supplied by Google's Programmable Search Engine. Product availability and prices are not verified by this app.</footer>
+</div>
+
+<div class="modal-backdrop" id="setupModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal">
+    <div class="modal-head"><h2 id="modalTitle">Connect image search</h2><button class="modal-close" id="closeModal" type="button" aria-label="Close settings"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+    <p>One-time setup. Create a free Google Programmable Search Engine, then paste its Search engine ID below.</p>
+    <ol class="steps">
+      <li>Open <a href="https://programmablesearchengine.google.com/controlpanel/all" target="_blank" rel="noopener noreferrer">Google Programmable Search</a> and create an engine.</li>
+      <li>Under <strong>Sites to search</strong>, add <strong>aliexpress.com</strong>.</li>
+      <li>Turn <strong>Image search</strong> on.</li>
+      <li>In the engine's <strong>Overview → Basic</strong> section, copy the <strong>Search engine ID</strong>.</li>
+    </ol>
+    <form id="setupForm">
+      <div class="setup-field"><label for="cxInput">Your Search engine ID</label><input id="cxInput" type="text" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="Paste search engine ID or embed code" required></div>
+      <p class="error" id="setupError" role="alert"></p>
+      <button class="save-btn" type="submit">Save and connect</button>
+    </form>
+    <p class="tiny">This ID is stored only in this browser. No Google Cloud API key is needed. The standard Google Search Element may display ads.</p>
+  </div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const ID_KEY='visual_product_search_cx_v1';
+  const HISTORY_KEY='visual_product_search_history_v1';
+  const PENDING_KEY='visual_product_search_pending_v1';
+  const FILTERS_KEY='visual_product_search_filters_v1';
+  const $=id=>document.getElementById(id);
+  const input=$('searchInput');
+  const form=$('searchForm');
+  const modal=$('setupModal');
+  const cxInput=$('cxInput');
+  const status=$('searchStatus');
+  const statusText=$('statusText');
+  const empty=$('emptyState');
+  const fallback=$('googleFallback');
+  let currentId='';
+  let queued='';
+  let pendingTimeout=null;
+  let poller=null;
+  let scriptErrorTimer=null;
+  let running=false;
+  let includes=[];
+  let excludes=[];
+
+  function read(key, fallbackValue='') { try { return localStorage.getItem(key) || fallbackValue; } catch(e) { return fallbackValue; } }
+  function write(key,value) { try { localStorage.setItem(key,value); return true; } catch(e) { return false; } }
+  function del(key) { try { localStorage.removeItem(key); } catch(e) {} }
+  function normalTerm(value) { return String(value || '').replace(/[“”"]/g,'').replace(/^[+\-]+/,'').replace(/\s+/g,' ').trim().slice(0,80); }
+  function restoreFilters() {
+    try {
+      const saved=JSON.parse(read(FILTERS_KEY,'{}'));
+      function cleanList(list) {
+        if(!Array.isArray(list)) return [];
+        const unique=[];
+        for(const raw of list.slice(0,30)) {
+          if(typeof raw!=='string') continue;
+          const t=normalTerm(raw);
+          if(t && !unique.some(x=>x.toLowerCase()===t.toLowerCase())) unique.push(t);
+        }
+        return unique.slice(0,15);
+      }
+      includes=cleanList(saved.include);
+      excludes=cleanList(saved.exclude).filter(t=>!includes.some(x=>x.toLowerCase()===t.toLowerCase()));
+    } catch(e) { includes=[]; excludes=[]; }
+  }
+  function saveFilters() { write(FILTERS_KEY,JSON.stringify({include:includes,exclude:excludes})); }
+  // Quotes make filter items literal words or exact phrases; - excludes each item.
+  function filterPart(term) { return '"'+term+'"'; }
+  function buildQuery(base) {
+    return [base.trim(),...includes.map(filterPart),...excludes.map(t=>'-'+filterPart(t))].filter(Boolean).join(' ');
+  }
+  function updatePreview() {
+    const combined=buildQuery(input.value.trim().replace(/\s+/g,' '));
+    $('compiledQuery').textContent=combined || 'Enter a product search or add an included term';
+  }
+  function renderFilterTags(kind) {
+    const list=kind==='include'?includes:excludes;
+    const el=$(kind==='include'?'includeTags':'excludeTags');
+    el.replaceChildren();
+    for(const term of list) {
+      const b=document.createElement('button');
+      b.type='button'; b.className='filter-tag '+kind;
+      b.setAttribute('aria-label','Remove '+kind+' filter '+term);
+      const word=document.createElement('span'); word.textContent=term;
+      const x=document.createElement('span'); x.className='tag-x'; x.textContent='×'; x.setAttribute('aria-hidden','true');
+      b.append(word,x);
+      b.addEventListener('click',()=>{
+        const index=list.indexOf(term);
+        if(index!==-1) list.splice(index,1);
+        saveFilters(); renderFilters();
+        $('filterFeedback').textContent='';
+      });
+      el.appendChild(b);
+    }
+  }
+  function renderFilters() { renderFilterTags('include'); renderFilterTags('exclude'); updatePreview(); }
+  function addFilter(kind) {
+    const field=$(kind==='include'?'includeInput':'excludeInput');
+    const term=normalTerm(field.value);
+    if(!term) { field.focus(); return; }
+    const group=kind==='include'?includes:excludes;
+    const other=kind==='include'?excludes:includes;
+    const message=$('filterFeedback');
+    if(group.some(t=>t.toLowerCase()===term.toLowerCase())) { message.textContent='That filter is already in the list.'; field.focus(); return; }
+    if(other.some(t=>t.toLowerCase()===term.toLowerCase())) { message.textContent='That term is in the other list. Remove it there first.'; field.focus(); return; }
+    if(group.length>=15) { message.textContent='Maximum 15 filters per list. Remove one to add another.'; field.focus(); return; }
+    group.push(term); field.value=''; message.textContent='';
+    saveFilters(); renderFilters(); field.focus();
+  }
+  function pendingBaseValue() {
+    const raw=read(PENDING_KEY);
+    if(!raw) return null;
+    del(PENDING_KEY);
+    try { const parsed=JSON.parse(raw); return parsed && typeof parsed.base==='string' ? parsed.base : raw; }
+    catch(e) { return raw; }
+  }
+  function historyEntries() { try { const data=JSON.parse(read(HISTORY_KEY,'[]')); return Array.isArray(data) ? data.filter(s=>typeof s==='string').slice(0,6) : []; } catch(e) { return []; } }
+  function renderRecent() {
+    const entries=historyEntries();
+    $('recentsSection').style.display=entries.length ? 'block' : 'none';
+    const list=$('recents'); list.replaceChildren();
+    for(const q of entries) { const b=document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=q; b.addEventListener('click',()=>search(q)); list.appendChild(b); }
+  }
+  function saveRecent(q) { const entries=[q,...historyEntries().filter(x=>x.toLowerCase()!==q.toLowerCase())].slice(0,6); write(HISTORY_KEY,JSON.stringify(entries)); renderRecent(); }
+  function showModal() { cxInput.value=currentId; $('setupError').textContent=''; modal.classList.add('open'); }
+  function closeModal() { if(!currentId) return; modal.classList.remove('open'); }
+  function parseId(value) {
+    const raw=value.trim();
+    const matched=raw.match(/[?&]cx=([a-zA-Z0-9:_-]+)/) || raw.match(/\bcx\s*=\s*["']([a-zA-Z0-9:_-]+)["']/);
+    return matched ? matched[1] : raw;
+  }
+  function getControl() { try { return window.google?.search?.cse?.element?.getElement?.('productSearch') || null; } catch(e) { return null; } }
+  function setLoading(message) { status.style.display='flex'; statusText.textContent=message; }
+  function clearLoading() { status.style.display='none'; }
+  function onResultsRendered() { clearLoading(); }
+  // Google provides the Search Element, including images, page links, and any ads.
+  window.__gcse={ searchCallbacks:{ image:{ rendered: onResultsRendered } } };
+  function runQueued() {
+    const control=getControl();
+    if(!control || !queued || running) return false;
+    const q=queued; queued=''; running=true;
+    try { control.execute(q); }
+    catch(err) { running=false; setLoading('Search failed to start. Check your engine settings and reload.'); return true; }
+    running=false;
+    clearTimeout(pendingTimeout);
+    pendingTimeout=setTimeout(()=>{ clearLoading(); },15000);
+    return true;
+  }
+  function loadGoogle(id) {
+    if(!id) return;
+    setLoading('Connecting to Google image search…');
+    // The Search Element automatically scans the existing gcse-searchresults-only div.
+    const script=document.createElement('script');
+    script.async=true;
+    script.src='https://cse.google.com/cse.js?cx='+encodeURIComponent(id);
+    script.onerror=()=>{ clearLoading(); empty.style.display='flex'; $('emptyCopy').textContent='Google image search could not load. Check your internet connection or privacy blocker, then reload.'; };
+    document.head.appendChild(script);
+    let ticks=0;
+    poller=setInterval(()=>{
+      ticks++;
+      if(getControl()) {
+        clearInterval(poller); poller=null;
+        if(queued) runQueued(); else clearLoading();
+      } else if(ticks>=150) {
+        clearInterval(poller); poller=null;
+        clearLoading();
+        if(queued) { empty.style.display='flex'; $('emptyCopy').textContent='Image search did not initialize. Confirm Image search is enabled and the Search engine ID is correct.'; }
+      }
+    },200);
+  }
+  function search(text) {
+    const base=(text || '').trim().replace(/\s+/g,' ').slice(0,180);
+    if(!base && !includes.length) { input.focus(); return; }
+    input.value=base;
+    input.blur();
+    updatePreview();
+    const q=buildQuery(base);
+    queued=q;
+    if(!currentId) { write(PENDING_KEY,JSON.stringify({base})); showModal(); return; }
+    if(base) saveRecent(base);
+    empty.style.display='none';
+    fallback.href='https://www.google.com/search?tbm=isch&q='+encodeURIComponent('site:aliexpress.com '+q);
+    fallback.style.display='inline';
+    setLoading('Searching for “'+q+'”…');
+    if(!runQueued()) setLoading('Preparing image search…');
+  }
+  form.addEventListener('submit',e=>{e.preventDefault();search(input.value);});
+  input.addEventListener('input',updatePreview);
+  $('includeForm').addEventListener('submit',e=>{e.preventDefault();addFilter('include');});
+  $('excludeForm').addEventListener('submit',e=>{e.preventDefault();addFilter('exclude');});
+  $('clearFilters').addEventListener('click',()=>{
+    includes=[]; excludes=[]; saveFilters(); renderFilters();
+    $('filterFeedback').textContent='';
+  });
+  $('suggestions').addEventListener('click',e=>{ const b=e.target.closest('button[data-query]'); if(b) search(b.dataset.query); });
+  $('clearHistory').addEventListener('click',()=>{ del(HISTORY_KEY); renderRecent(); });
+  $('settingsBtn').addEventListener('click',showModal);
+  $('closeModal').addEventListener('click',closeModal);
+  modal.addEventListener('click',e=>{ if(e.target===modal) closeModal(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+  $('setupForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    const id=parseId(cxInput.value);
+    if(!/^[a-zA-Z0-9:_-]{6,120}$/.test(id)) { $('setupError').textContent='Enter a valid Search engine ID (or paste the full embed code).'; return; }
+    if(queued) write(PENDING_KEY,JSON.stringify({base:input.value.trim()}));
+    write(ID_KEY,id);
+    location.reload();
+  });
+  restoreFilters();
+  renderFilters();
+  renderRecent();
+  currentId=read(ID_KEY);
+  const urlQuery=new URLSearchParams(location.search).get('q');
+  const pending=pendingBaseValue();
+  if(!currentId) { showModal(); }
+  else {
+    loadGoogle(currentId);
+    if(urlQuery!==null || pending!==null) search(urlQuery!==null ? urlQuery : pending);
+  }
+})();
+</script>
+</body>
+</html>
